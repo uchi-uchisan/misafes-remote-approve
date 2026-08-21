@@ -115,6 +115,50 @@
     font-size:12.5px;
     padding:40px 0;
   }
+  .style-picker{
+    margin:10px 0;
+    padding:10px;
+    background:rgba(255,255,255,0.03);
+    border-radius:8px;
+  }
+  .style-picker-row{
+    margin-bottom:8px;
+  }
+  .style-picker-row label{
+    display:block;
+    font-size:10.5px;
+    color:rgba(245,236,224,0.5);
+    margin-bottom:5px;
+  }
+  .style-opt-row{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+  }
+  .color-opt{
+    width:26px; height:26px;
+    border-radius:50%;
+    border:2px solid rgba(255,255,255,0.3);
+    cursor:pointer;
+  }
+  .color-opt.selected{
+    border-color:var(--gold);
+    box-shadow:0 0 0 2px rgba(212,168,67,0.4);
+  }
+  .text-opt{
+    padding:6px 10px;
+    background:rgba(255,255,255,0.06);
+    border:1.5px solid rgba(255,255,255,0.15);
+    border-radius:6px;
+    font-size:11px;
+    color:var(--paper);
+    cursor:pointer;
+  }
+  .text-opt.selected{
+    border-color:var(--gold);
+    background:rgba(212,168,67,0.2);
+    color:var(--gold);
+  }
 </style>
 </head>
 <body>
@@ -132,6 +176,7 @@
 
 <script>
   const PENDING_URL = "https://script.google.com/macros/s/AKfycbzu8iWmrG1pRTN1JBiDFLdvfIDtckPsrRD2fT6vkNHunHJi2Nexo_KIvjveO5r7xP_ixw/exec?action=getPending";
+  const APPROVALS_URL = "https://script.google.com/macros/s/AKfycbzu8iWmrG1pRTN1JBiDFLdvfIDtckPsrRD2fT6vkNHunHJi2Nexo_KIvjveO5r7xP_ixw/exec?action=getRemoteApprovals";
   const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbzu8iWmrG1pRTN1JBiDFLdvfIDtckPsrRD2fT6vkNHunHJi2Nexo_KIvjveO5r7xP_ixw/exec";
 
   const itemList = document.getElementById('item-list');
@@ -143,12 +188,24 @@
     return NG_WORDS.filter(w => message.includes(w));
   }
 
+  // 装飾の選択肢(操作パネル側の主要な項目だけを、簡易的に再現したもの)
+  const COLOR_OPTS = ['#f5ece0','#2a2118','#e05a2d','#d4a843','#4caf6e','#3c8ce8'];
+  const SHAPE_OPTS = [{v:'box', t:'四角'}, {v:'glow', t:'ぼかし'}, {v:'bubble', t:'吹き出し'}];
+  const POS_OPTS = [{v:'top', t:'上'}, {v:'center', t:'中央'}, {v:'bottom', t:'下'}];
+
   async function loadPending(){
     itemList.innerHTML = '<div class="empty">読み込み中…</div>';
     try{
-      const res = await fetch(PENDING_URL, { cache: 'no-store' });
-      const items = await res.json();
-      renderList(items.reverse()); // 新しいものを上に
+      const [pendingRes, approvalsRes] = await Promise.all([
+        fetch(PENDING_URL, { cache: 'no-store' }),
+        fetch(APPROVALS_URL, { cache: 'no-store' })
+      ]);
+      const items = await pendingRes.json();
+      const approvals = await approvalsRes.json();
+      // すでに遠隔承認済みのものは、二重に追加されないよう一覧から除外する
+      const approvedKeys = new Set(approvals.map(a => a.photoKey));
+      const remaining = items.filter(item => !approvedKeys.has(item.time));
+      renderList(remaining.reverse()); // 新しいものを上に
     }catch(err){
       itemList.innerHTML = '<div class="empty">読み込みに失敗しました。もう一度「更新する」を押してください</div>';
     }
@@ -177,13 +234,68 @@
       if(ngWords.length > 0){
         html += `<div class="flag">⚠️ 気になる言葉が含まれています(${escapeHtml(ngWords.join('、'))})</div>`;
       }
+
+      // 簡易装飾選択(文字色・形・位置)。メッセージがある投稿の時だけ意味があるが、常に表示しておく
+      html += `<div class="style-picker">
+        <div class="style-picker-row">
+          <label>文字色</label>
+          <div class="style-opt-row color-row">
+            ${COLOR_OPTS.map((c,i) => `<div class="color-opt${i===0?' selected':''}" data-color="${c}" style="background:${c};"></div>`).join('')}
+          </div>
+        </div>
+        <div class="style-picker-row">
+          <label>形</label>
+          <div class="style-opt-row shape-row">
+            ${SHAPE_OPTS.map((s,i) => `<div class="text-opt${i===0?' selected':''}" data-shape="${s.v}">${s.t}</div>`).join('')}
+          </div>
+        </div>
+        <div class="style-picker-row">
+          <label>文字の位置</label>
+          <div class="style-opt-row pos-row">
+            ${POS_OPTS.map((p,i) => `<div class="text-opt${i===1?' selected':''}" data-pos="${p.v}">${p.t}</div>`).join('')}
+          </div>
+        </div>
+      </div>`;
       html += `<button class="approve-btn">✅ 会場スクリーンに追加する</button>`;
       el.innerHTML = html;
+
+      // 色・形・位置、それぞれタップで選択できるようにする(同じグループ内は1つだけ選ばれる)
+      el.querySelectorAll('.color-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+          el.querySelectorAll('.color-opt').forEach(o => o.classList.remove('selected'));
+          opt.classList.add('selected');
+        });
+      });
+      el.querySelectorAll('.shape-row .text-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+          el.querySelectorAll('.shape-row .text-opt').forEach(o => o.classList.remove('selected'));
+          opt.classList.add('selected');
+        });
+      });
+      el.querySelectorAll('.pos-row .text-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+          el.querySelectorAll('.pos-row .text-opt').forEach(o => o.classList.remove('selected'));
+          opt.classList.add('selected');
+        });
+      });
 
       el.querySelector('.approve-btn').addEventListener('click', async (e) => {
         const btn = e.target;
         btn.disabled = true;
         btn.textContent = '送信中…';
+
+        const selectedColor = el.querySelector('.color-opt.selected').dataset.color;
+        const selectedShape = el.querySelector('.shape-row .text-opt.selected').dataset.shape;
+        const selectedPos = el.querySelector('.pos-row .text-opt.selected').dataset.pos;
+        const style = {
+          colorCustom: selectedColor,
+          shape: selectedShape,
+          pos: selectedPos,
+          deco: 'normal',
+          font: 'gothic',
+          bgCustom: '#1a1420'
+        };
+
         try{
           await fetch(SUBMIT_URL, {
             method: 'POST',
@@ -194,7 +306,7 @@
               photoKey: key,
               photoUrl: item.photoUrl || '',
               caption: item.message || '',
-              style: null
+              style: style
             })
           });
           btn.textContent = '✅ 追加を依頼しました';
