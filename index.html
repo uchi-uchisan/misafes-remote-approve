@@ -205,7 +205,7 @@
       // すでに遠隔承認済みのものは、二重に追加されないよう一覧から除外する
       const approvedKeys = new Set(approvals.map(a => a.photoKey));
       const remaining = items.filter(item => !approvedKeys.has(item.time));
-      renderList(remaining.reverse()); // 新しいものを上に
+      renderList(remaining); // 古い順(投稿された順)のまま表示する
     }catch(err){
       itemList.innerHTML = '<div class="empty">読み込みに失敗しました。もう一度「更新する」を押してください</div>';
     }
@@ -288,11 +288,14 @@
         const selectedShape = el.querySelector('.shape-row .text-opt.selected').dataset.shape;
         const selectedPos = el.querySelector('.pos-row .text-opt.selected').dataset.pos;
         const style = {
+          size: 22,
+          color: 'custom',
           colorCustom: selectedColor,
           shape: selectedShape,
           pos: selectedPos,
           deco: 'normal',
           font: 'gothic',
+          bg: 'custom',
           bgCustom: '#1a1420'
         };
 
