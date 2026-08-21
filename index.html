@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>みさフェス 遠隔承認(実験的機能)</title>
+<style>
+  :root{
+    --night: #1a1420;
+    --gold: #d4a843;
+    --lantern: #e05a2d;
+    --paper: #f5ece0;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0;
+    background:var(--night);
+    color:var(--paper);
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif;
+    padding:16px 14px 60px;
+  }
+  h1{
+    font-size:16px;
+    color:var(--gold);
+    text-align:center;
+    margin:8px 0 4px;
+  }
+  .sub{
+    font-size:11.5px;
+    color:rgba(245,236,224,0.55);
+    text-align:center;
+    line-height:1.7;
+    margin-bottom:18px;
+  }
+  .warn-box{
+    background:rgba(224,90,45,0.12);
+    border:1.5px solid rgba(224,90,45,0.5);
+    border-radius:10px;
+    padding:12px 14px;
+    font-size:11.5px;
+    line-height:1.7;
+    margin-bottom:18px;
+    color:rgba(245,236,224,0.9);
+  }
+  #refresh-btn{
+    display:block;
+    width:100%;
+    padding:12px;
+    margin-bottom:16px;
+    background:rgba(212,168,67,0.12);
+    border:1.5px solid var(--gold);
+    color:var(--gold);
+    border-radius:10px;
+    font-size:13.5px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  .item{
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(212,168,67,0.25);
+    border-radius:12px;
+    padding:14px;
+    margin-bottom:14px;
+  }
+  .item img{
+    width:100%;
+    border-radius:8px;
+    display:block;
+    margin-bottom:10px;
+    background:#000;
+  }
+  .item .msg{
+    font-size:13px;
+    line-height:1.6;
+    margin-bottom:6px;
+    white-space:pre-wrap;
+  }
+  .item .time{
+    font-size:10.5px;
+    color:rgba(245,236,224,0.4);
+    margin-bottom:10px;
+  }
+  .item .flag{
+    font-size:11px;
+    color:#ff9a7a;
+    background:rgba(224,45,45,0.15);
+    border-radius:6px;
+    padding:6px 8px;
+    margin-bottom:10px;
+  }
+  .approve-btn{
+    display:block;
+    width:100%;
+    padding:12px;
+    background:linear-gradient(135deg, rgba(212,168,67,0.3), rgba(224,90,45,0.25));
+    border:1.5px solid var(--gold);
+    color:var(--gold);
+    border-radius:8px;
+    font-size:13.5px;
+    font-weight:900;
+    cursor:pointer;
+  }
+  .approve-btn:disabled{
+    opacity:0.4;
+    cursor:default;
+  }
+  .approve-btn.done{
+    background:rgba(120,180,120,0.2);
+    border-color:#7fd97f;
+    color:#7fd97f;
+  }
+  .empty{
+    text-align:center;
+    color:rgba(245,236,224,0.4);
+    font-size:12.5px;
+    padding:40px 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>📋 遠隔承認(実験的機能)</h1>
+<div class="sub">パソコンを使わなくても、この画面から会場スクリーンに写真を追加できます。</div>
+
+<div class="warn-box">
+  ⚠️ これは実験的な機能です。反映まで少し時間がかかることがあります(会場側が数秒おきに確認しています)。うまくいかない場合は、これまで通りパソコンの操作パネルから承認してください。
+</div>
+
+<button id="refresh-btn">🔄 一覧を更新する</button>
+
+<div id="item-list"></div>
+
+<script>
+  const PENDING_URL = "https://script.google.com/macros/s/AKfycbzu8iWmrG1pRTN1JBiDFLdvfIDtckPsrRD2fT6vkNHunHJi2Nexo_KIvjveO5r7xP_ixw/exec?action=getPending";
+  const SUBMIT_URL = "https://script.google.com/macros/s/AKfycbzu8iWmrG1pRTN1JBiDFLdvfIDtckPsrRD2fT6vkNHunHJi2Nexo_KIvjveO5r7xP_ixw/exec";
+
+  const itemList = document.getElementById('item-list');
+
+  // 簡易的なNGワードチェック(操作パネル側と同じ考え方の、簡易版)
+  const NG_WORDS = ['死ね','殺す','馬鹿','ばか','アホ','あほ','クソ','くそ','キモい','きもい'];
+  function checkNgWords(message){
+    if(!message) return [];
+    return NG_WORDS.filter(w => message.includes(w));
+  }
+
+  async function loadPending(){
+    itemList.innerHTML = '<div class="empty">読み込み中…</div>';
+    try{
+      const res = await fetch(PENDING_URL, { cache: 'no-store' });
+      const items = await res.json();
+      renderList(items.reverse()); // 新しいものを上に
+    }catch(err){
+      itemList.innerHTML = '<div class="empty">読み込みに失敗しました。もう一度「更新する」を押してください</div>';
+    }
+  }
+
+  function renderList(items){
+    if(items.length === 0){
+      itemList.innerHTML = '<div class="empty">承認待ちの投稿はありません</div>';
+      return;
+    }
+    itemList.innerHTML = '';
+    items.forEach(item => {
+      const key = item.time;
+      const el = document.createElement('div');
+      el.className = 'item';
+
+      const ngWords = checkNgWords(item.message);
+      let html = '';
+      if(item.photoUrl){
+        html += `<img src="${item.photoUrl}" loading="lazy">`;
+      }
+      if(item.message){
+        html += `<div class="msg">${escapeHtml(item.message)}</div>`;
+      }
+      html += `<div class="time">${escapeHtml(item.time)}</div>`;
+      if(ngWords.length > 0){
+        html += `<div class="flag">⚠️ 気になる言葉が含まれています(${escapeHtml(ngWords.join('、'))})</div>`;
+      }
+      html += `<button class="approve-btn">✅ 会場スクリーンに追加する</button>`;
+      el.innerHTML = html;
+
+      el.querySelector('.approve-btn').addEventListener('click', async (e) => {
+        const btn = e.target;
+        btn.disabled = true;
+        btn.textContent = '送信中…';
+        try{
+          await fetch(SUBMIT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+              action: 'remoteApprovePhoto',
+              photoKey: key,
+              photoUrl: item.photoUrl || '',
+              caption: item.message || '',
+              style: null
+            })
+          });
+          btn.textContent = '✅ 追加を依頼しました';
+          btn.classList.add('done');
+        }catch(err){
+          btn.disabled = false;
+          btn.textContent = '送信に失敗しました。もう一度押してください';
+        }
+      });
+
+      itemList.appendChild(el);
+    });
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  document.getElementById('refresh-btn').addEventListener('click', loadPending);
+  loadPending();
+</script>
+
+</body>
+</html>
