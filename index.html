@@ -74,6 +74,10 @@
     margin-bottom:10px;
     background:#000;
   }
+  .preview-stage-textonly{
+    aspect-ratio:16/10;
+    background:linear-gradient(135deg, #1a1420, #2a2036);
+  }
   .preview-stage img{
     width:100%;
     display:block;
@@ -289,6 +293,9 @@
       let html = '';
       if(item.photoUrl){
         html += `<div class="preview-stage"><img src="${item.photoUrl}" loading="lazy"><div class="preview-caption" style="display:none;"><span class="preview-caption-text"></span></div></div>`;
+      }else if(item.message){
+        // 写真がない(文字のみの)投稿も、会場では暗い背景の上に表示されるため、それに合わせたプレビュー欄を用意する
+        html += `<div class="preview-stage preview-stage-textonly"><div class="preview-caption" style="display:none;"><span class="preview-caption-text"></span></div></div>`;
       }
       if(item.message){
         html += `<div class="msg">${escapeHtml(item.message)}</div>`;
