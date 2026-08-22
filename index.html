@@ -290,12 +290,13 @@
       el.dataset.key = key; // 高速チェックで、この項目を素早く探せるようにする
 
       const ngWords = checkNgWords(item.message);
+      const isTextOnly = !item.photoUrl && !!item.message; // 写真がなく、文字のみの投稿かどうか
       let html = '';
       if(item.photoUrl){
         html += `<div class="preview-stage"><img src="${item.photoUrl}" loading="lazy"><div class="preview-caption" style="display:none;"><span class="preview-caption-text"></span></div></div>`;
       }else if(item.message){
         // 写真がない(文字のみの)投稿も、会場では暗い背景の上に表示されるため、それに合わせたプレビュー欄を用意する
-        html += `<div class="preview-stage preview-stage-textonly"><div class="preview-caption" style="display:none;"><span class="preview-caption-text"></span></div></div>`;
+        html += `<div class="preview-stage preview-stage-textonly" style="background:${BG_OPTS[0]};"><div class="preview-caption" style="display:none;"><span class="preview-caption-text"></span></div></div>`;
       }
       if(item.message){
         html += `<div class="msg">${escapeHtml(item.message)}</div>`;
@@ -306,6 +307,8 @@
       }
 
       // 簡易装飾選択(文字色・形・位置)。メッセージがある投稿の時だけ意味があるが、常に表示しておく
+      // ※文字のみの投稿(写真なし)は、会場での表示の仕組み自体が異なり、
+      //   「背景色」は画面全体の背景として使われ、「形」は使われず、「装飾効果」も「袋文字」以外は反映されない
       html += `<div class="style-picker">
         <div class="style-picker-row">
           <label>文字の大きさ</label>
@@ -320,21 +323,21 @@
           </div>
         </div>
         <div class="style-picker-row">
-          <label>背景色</label>
+          <label>${isTextOnly ? '画面全体の背景色' : '背景色'}</label>
           <div class="style-opt-row bg-row">
             ${BG_OPTS.map((c,i) => `<div class="color-opt${i===0?' selected':''}" data-bg="${c}" style="background:${c}; ${c==='#ffffff' ? 'box-shadow:inset 0 0 0 1px rgba(0,0,0,0.2);' : ''}"></div>`).join('')}
           </div>
         </div>
-        <div class="style-picker-row">
+        ${isTextOnly ? '' : `<div class="style-picker-row">
           <label>形</label>
           <div class="style-opt-row shape-row">
             ${SHAPE_OPTS.map((s,i) => `<div class="text-opt${i===0?' selected':''}" data-shape="${s.v}">${s.t}</div>`).join('')}
           </div>
-        </div>
+        </div>`}
         <div class="style-picker-row">
-          <label>装飾効果</label>
+          <label>装飾効果${isTextOnly ? '(文字のみの投稿は「袋文字」以外は反映されません)' : ''}</label>
           <div class="style-opt-row deco-row">
-            ${DECO_OPTS.map((d,i) => `<div class="text-opt${i===0?' selected':''}" data-deco="${d.v}">${d.t}</div>`).join('')}
+            ${(isTextOnly ? DECO_OPTS.filter(d => d.v === 'normal' || d.v === 'outline') : DECO_OPTS).map((d,i) => `<div class="text-opt${i===0?' selected':''}" data-deco="${d.v}">${d.t}</div>`).join('')}
           </div>
         </div>
         <div class="style-picker-row">
@@ -369,8 +372,6 @@
         const size = parseInt(el.querySelector('.size-row .text-opt.selected').dataset.size, 10);
         const color = el.querySelector('.color-row .color-opt.selected').dataset.color;
         const bg = el.querySelector('.bg-row .color-opt.selected').dataset.bg;
-        const bgRgb = hexToRgbStr_(bg);
-        const shape = el.querySelector('.shape-row .text-opt.selected').dataset.shape;
         const deco = el.querySelector('.deco-row .text-opt.selected').dataset.deco;
         const font = el.querySelector('.font-row .text-opt.selected').dataset.font;
         const pos = el.querySelector('.pos-row .text-opt.selected').dataset.pos;
@@ -379,8 +380,6 @@
         const box = previewCap.querySelector('.preview-caption-text');
         box.textContent = item.message;
         box.style.fontFamily = FONT_CSS[font] || FONT_CSS.yomogi;
-        // プレビュー欄は実物より小さいので、見た目のバランスを取って縮小して表示する(縮小率は目安)
-        box.style.fontSize = (size * 0.55) + 'px';
         box.style.color = color;
         box.style.webkitTextFillColor = '';
         box.style.webkitTextStroke = '';
@@ -390,6 +389,25 @@
         box.style.textShadow = 'none';
         box.style.fontWeight = '700';
         box.style.boxShadow = 'none';
+
+        if(isTextOnly){
+          // 文字のみの投稿:背景色は「画面全体」に、文字には背景をつけない(会場側の実際の仕組みと同じ)
+          const stage = el.querySelector('.preview-stage-textonly');
+          if(stage) stage.style.background = bg;
+          box.style.background = 'transparent';
+          box.style.borderRadius = '0';
+          box.style.padding = '4px';
+          box.style.fontSize = (size * 0.85) + 'px'; // 文字のみの投稿は、会場でも大きめに表示される
+          if(deco === 'outline'){
+            box.style.webkitTextStroke = `1.3px ${isLightColor_(color) ? '#1a1420' : '#f5ece0'}`;
+          }
+          return;
+        }
+
+        const bgRgb = hexToRgbStr_(bg);
+        const shape = el.querySelector('.shape-row .text-opt.selected').dataset.shape;
+        // プレビュー欄は実物より小さいので、見た目のバランスを取って縮小して表示する(縮小率は目安)
+        box.style.fontSize = (size * 0.55) + 'px';
 
         // 形(会場側の.shape-glow等と同じ考え方で再現する)
         if(shape === 'glow'){
@@ -485,7 +503,8 @@
         const selectedSize = el.querySelector('.size-row .text-opt.selected').dataset.size;
         const selectedColor = el.querySelector('.color-row .color-opt.selected').dataset.color;
         const selectedBg = el.querySelector('.bg-row .color-opt.selected').dataset.bg;
-        const selectedShape = el.querySelector('.shape-row .text-opt.selected').dataset.shape;
+        const shapeEl = el.querySelector('.shape-row .text-opt.selected');
+        const selectedShape = shapeEl ? shapeEl.dataset.shape : 'glow';
         const selectedDeco = el.querySelector('.deco-row .text-opt.selected').dataset.deco;
         const selectedFont = el.querySelector('.font-row .text-opt.selected').dataset.font;
         const selectedPos = el.querySelector('.pos-row .text-opt.selected').dataset.pos;
