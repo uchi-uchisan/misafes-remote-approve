@@ -61,13 +61,37 @@
     border-radius:12px;
     padding:14px;
     margin-bottom:14px;
+    transition:opacity 0.3s ease;
   }
-  .item img{
+  .preview-stage{
+    position:relative;
     width:100%;
     border-radius:8px;
-    display:block;
+    overflow:hidden;
     margin-bottom:10px;
     background:#000;
+  }
+  .preview-stage img{
+    width:100%;
+    display:block;
+    margin-bottom:0;
+  }
+  .preview-caption{
+    position:absolute;
+    inset:0;
+    display:flex;
+    justify-content:center;
+    padding:16px;
+    pointer-events:none;
+  }
+  .preview-caption-text{
+    padding:8px 14px;
+    font-size:15px;
+    font-weight:700;
+    line-height:1.5;
+    max-width:90%;
+    word-break:break-word;
+    text-align:center;
   }
   .item .msg{
     font-size:13px;
@@ -221,11 +245,12 @@
       const key = item.time;
       const el = document.createElement('div');
       el.className = 'item';
+      el.dataset.key = key; // 高速チェックで、この項目を素早く探せるようにする
 
       const ngWords = checkNgWords(item.message);
       let html = '';
       if(item.photoUrl){
-        html += `<img src="${item.photoUrl}" loading="lazy">`;
+        html += `<div class="preview-stage"><img src="${item.photoUrl}" loading="lazy"><div class="preview-caption" style="display:none;"><span class="preview-caption-text"></span></div></div>`;
       }
       if(item.message){
         html += `<div class="msg">${escapeHtml(item.message)}</div>`;
@@ -258,6 +283,34 @@
       </div>`;
       html += `<button class="approve-btn">✅ 会場スクリーンに追加する</button>`;
       el.innerHTML = html;
+
+      // 選んだ装飾を、写真の上に実際に重ねて見せる(プレビュー)
+      function updatePreview(){
+        const previewCap = el.querySelector('.preview-caption');
+        if(!previewCap || !item.message) return;
+        const color = el.querySelector('.color-opt.selected').dataset.color;
+        const shape = el.querySelector('.shape-row .text-opt.selected').dataset.shape;
+        const pos = el.querySelector('.pos-row .text-opt.selected').dataset.pos;
+        previewCap.style.display = 'flex';
+        previewCap.style.alignItems = pos === 'top' ? 'flex-start' : (pos === 'bottom' ? 'flex-end' : 'center');
+        previewCap.querySelector('.preview-caption-text').textContent = item.message;
+        previewCap.querySelector('.preview-caption-text').style.color = color;
+        const span = previewCap.querySelector('.preview-caption-text');
+        if(shape === 'bubble'){
+          span.style.background = 'rgba(26,20,32,0.85)';
+          span.style.borderRadius = '16px';
+        }else if(shape === 'glow'){
+          span.style.background = 'transparent';
+          span.style.textShadow = '0 0 10px rgba(0,0,0,0.9), 0 0 18px rgba(0,0,0,0.7)';
+        }else{
+          span.style.background = 'rgba(26,20,32,0.75)';
+          span.style.borderRadius = '6px';
+        }
+      }
+      el.querySelectorAll('.color-opt, .shape-row .text-opt, .pos-row .text-opt').forEach(opt => {
+        opt.addEventListener('click', () => setTimeout(updatePreview, 0)); // 選択反映(selected付与)の直後に更新する
+      });
+      updatePreview();
 
       // 色・形・位置、それぞれタップで選択できるようにする(同じグループ内は1つだけ選ばれる)
       el.querySelectorAll('.color-opt').forEach(opt => {
@@ -314,6 +367,7 @@
           });
           btn.textContent = '✅ 追加を依頼しました';
           btn.classList.add('done');
+          setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 300); }, 500); // 少し見せてから、すぐ一覧から消す
         }catch(err){
           btn.disabled = false;
           btn.textContent = '送信に失敗しました。もう一度押してください';
@@ -332,6 +386,32 @@
 
   document.getElementById('refresh-btn').addEventListener('click', loadPending);
   loadPending();
+  setInterval(loadPending, 8000); // 8秒おきに、一覧全体を更新
+
+  // それとは別に、「承認状況」だけを、より軽く・素早く確認する(2.5秒ごと)
+  // (PC・遠隔、どちらで承認されても、素早くお互いに反映されるようにするため)
+  const fastSeenApprovals = new Set();
+  setInterval(async () => {
+    try{
+      const res = await fetch(APPROVALS_URL, { cache: 'no-store' });
+      if(!res.ok) return;
+      const approvals = await res.json();
+      approvals.forEach(a => {
+        if(!a.photoKey || fastSeenApprovals.has(a.photoKey)) return;
+        fastSeenApprovals.add(a.photoKey);
+        const itemEl = document.querySelector(`.item[data-key="${CSS.escape(a.photoKey)}"]`);
+        if(itemEl){
+          itemEl.style.opacity = '0';
+          setTimeout(() => {
+            itemEl.remove();
+            if(itemList.children.length === 0){
+              itemList.innerHTML = '<div class="empty">承認待ちの投稿はありません</div>';
+            }
+          }, 300);
+        }
+      });
+    }catch(err){ /* 次回のチェックで再挑戦する */ }
+  }, 2500);
 </script>
 
 </body>
