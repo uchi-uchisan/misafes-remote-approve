@@ -216,11 +216,11 @@
   }
 
   // 装飾の選択肢(操作パネル側の主要な項目だけを、簡易的に再現したもの)
-  const COLOR_OPTS = ['#f5ece0','#2a2118','#e05a2d','#d4a843','#4caf6e','#3c8ce8'];
-  const BG_OPTS = ['#1a1420','#ffffff','#e05a2d','#2a4d3a','#1a2a4d'];
-  const SHAPE_OPTS = [{v:'box', t:'四角'}, {v:'glow', t:'ぼかし'}, {v:'bubble', t:'吹き出し'}];
-  const FONT_OPTS = [{v:'gothic', t:'ゴシック体'}, {v:'yomogi', t:'手書き風'}, {v:'klee', t:'やわらかい手書き'}, {v:'textbook', t:'教科書体'}];
-  const SIZE_OPTS = [{v:14, t:'小'}, {v:22, t:'中'}, {v:32, t:'大'}, {v:44, t:'特大'}];
+  const COLOR_OPTS = ['#2a2118','#f5ece0','#e05a2d','#d4a843','#4caf6e','#3c8ce8'];
+  const BG_OPTS = ['#f5ece0','#1a1420','#ffffff','#2a4d3a','#1a2a4d'];
+  const SHAPE_OPTS = [{v:'glow', t:'ぼかし'}, {v:'box', t:'四角'}, {v:'bubble', t:'吹き出し'}];
+  const FONT_OPTS = [{v:'yomogi', t:'手書き風'}, {v:'klee', t:'やわらかい手書き'}, {v:'textbook', t:'教科書体'}, {v:'gothic', t:'ゴシック体'}];
+  const SIZE_OPTS = [{v:18, t:'小'}, {v:26, t:'中'}, {v:36, t:'大'}, {v:48, t:'特大'}];
   const DECO_OPTS = [{v:'normal', t:'通常'}, {v:'shadow', t:'ドロップシャドウ'}, {v:'gradient', t:'グラデーション'}, {v:'pop', t:'ポップ'}, {v:'rainbow', t:'虹色'}, {v:'outline', t:'袋文字'}];
   const POS_OPTS = [{v:'top', t:'上'}, {v:'center', t:'中央'}, {v:'bottom', t:'下'}];
   const FONT_CSS = {
@@ -339,69 +339,86 @@
         <div class="style-picker-row">
           <label>文字の位置</label>
           <div class="style-opt-row pos-row">
-            ${POS_OPTS.map((p,i) => `<div class="text-opt${i===1?' selected':''}" data-pos="${p.v}">${p.t}</div>`).join('')}
+            ${POS_OPTS.map((p,i) => `<div class="text-opt${i===2?' selected':''}" data-pos="${p.v}">${p.t}</div>`).join('')}
           </div>
         </div>
       </div>`;
       html += `<button class="approve-btn">✅ 会場スクリーンに追加する</button>`;
       el.innerHTML = html;
 
-      // 選んだ装飾を、写真の上に実際に重ねて見せる(プレビュー)
+      // 選んだ装飾を、写真の上に実際に重ねて見せる(プレビュー。会場スクリーン側のロジックにできるだけ忠実に再現している)
+      function hexToRgbStr_(hex){
+        const v = hex.replace('#', '');
+        return `${parseInt(v.substr(0,2),16)},${parseInt(v.substr(2,2),16)},${parseInt(v.substr(4,2),16)}`;
+      }
+      function isLightColor_(hex){
+        const v = hex.replace('#', '');
+        const r = parseInt(v.substr(0,2),16), g = parseInt(v.substr(2,2),16), b = parseInt(v.substr(4,2),16);
+        return (r*299 + g*587 + b*114) / 1000 > 150;
+      }
       function updatePreview(){
         const previewCap = el.querySelector('.preview-caption');
         if(!previewCap || !item.message) return;
-        const size = el.querySelector('.size-row .text-opt.selected').dataset.size;
+        const size = parseInt(el.querySelector('.size-row .text-opt.selected').dataset.size, 10);
         const color = el.querySelector('.color-row .color-opt.selected').dataset.color;
         const bg = el.querySelector('.bg-row .color-opt.selected').dataset.bg;
+        const bgRgb = hexToRgbStr_(bg);
         const shape = el.querySelector('.shape-row .text-opt.selected').dataset.shape;
         const deco = el.querySelector('.deco-row .text-opt.selected').dataset.deco;
         const font = el.querySelector('.font-row .text-opt.selected').dataset.font;
         const pos = el.querySelector('.pos-row .text-opt.selected').dataset.pos;
         previewCap.style.display = 'flex';
         previewCap.style.alignItems = pos === 'top' ? 'flex-start' : (pos === 'bottom' ? 'flex-end' : 'center');
-        const span = previewCap.querySelector('.preview-caption-text');
-        span.textContent = item.message;
-        span.style.fontFamily = FONT_CSS[font] || FONT_CSS.gothic;
-        // プレビュー欄の表示上、実物の文字サイズをそのまま使うと大きすぎるため、見た目のバランスを取って縮小して表示する
-        span.style.fontSize = (parseInt(size, 10) * 0.55) + 'px';
+        const box = previewCap.querySelector('.preview-caption-text');
+        box.textContent = item.message;
+        box.style.fontFamily = FONT_CSS[font] || FONT_CSS.yomogi;
+        // プレビュー欄は実物より小さいので、見た目のバランスを取って縮小して表示する(縮小率は目安)
+        box.style.fontSize = (size * 0.55) + 'px';
+        box.style.color = color;
+        box.style.webkitTextFillColor = '';
+        box.style.webkitTextStroke = '';
+        box.style.backgroundImage = 'none';
+        box.style.webkitBackgroundClip = 'border-box';
+        box.style.backgroundClip = 'border-box';
+        box.style.textShadow = 'none';
+        box.style.fontWeight = '700';
+        box.style.boxShadow = 'none';
 
-        // 形(背景の見せ方)
-        if(shape === 'bubble'){
-          span.style.background = bg;
-          span.style.borderRadius = '16px';
-        }else if(shape === 'glow'){
-          span.style.background = 'transparent';
+        // 形(会場側の.shape-glow等と同じ考え方で再現する)
+        if(shape === 'glow'){
+          box.style.background = `radial-gradient(ellipse at center, rgba(${bgRgb},0.92) 0%, rgba(${bgRgb},0.65) 45%, rgba(${bgRgb},0) 78%)`;
+          box.style.borderRadius = '0';
+          box.style.padding = '14px 22px';
+        }else if(shape === 'bubble'){
+          box.style.background = bg;
+          box.style.borderRadius = '16px';
+          box.style.padding = '8px 14px';
         }else{
-          span.style.background = bg;
-          span.style.borderRadius = '6px';
+          box.style.background = bg;
+          box.style.borderRadius = '6px';
+          box.style.padding = '8px 14px';
         }
 
-        // 装飾効果(簡易的な再現)
-        span.style.color = color;
-        span.style.backgroundClip = 'border-box';
-        span.style.webkitBackgroundClip = 'border-box';
-        span.style.webkitTextFillColor = '';
-        span.style.webkitTextStroke = '';
-        span.style.textShadow = shape === 'glow' ? `0 0 10px ${bg}, 0 0 18px ${bg}` : 'none';
-        if(deco === 'shadow'){
-          span.style.textShadow = (span.style.textShadow === 'none' ? '' : span.style.textShadow + ', ') + '3px 3px 0 rgba(0,0,0,0.6)';
+        // 装飾効果(会場側のdeco-outline等と同じ考え方で再現する)
+        if(deco === 'outline'){
+          box.style.webkitTextStroke = `1.3px ${isLightColor_(color) ? '#1a1420' : '#f5ece0'}`;
+        }else if(deco === 'shadow'){
+          const d = Math.max(2, Math.round(size / 10));
+          box.style.textShadow = `${d}px ${d}px 0 rgba(0,0,0,0.55)`;
         }else if(deco === 'gradient'){
-          span.style.backgroundImage = `linear-gradient(135deg, ${color}, #ffd75e)`;
-          span.style.webkitBackgroundClip = 'text';
-          span.style.backgroundClip = 'text';
-          span.style.webkitTextFillColor = 'transparent';
+          box.style.backgroundImage = `linear-gradient(135deg, ${color}, #d4a843)`;
+          box.style.webkitBackgroundClip = 'text';
+          box.style.backgroundClip = 'text';
+          box.style.webkitTextFillColor = 'transparent';
         }else if(deco === 'rainbow'){
-          span.style.backgroundImage = 'linear-gradient(90deg, #ff5a5a, #ffb347, #ffe066, #6ee7a0, #5ac8ff, #b06eff)';
-          span.style.webkitBackgroundClip = 'text';
-          span.style.backgroundClip = 'text';
-          span.style.webkitTextFillColor = 'transparent';
-        }else if(deco === 'outline'){
-          span.style.webkitTextStroke = `1.5px ${color}`;
-          span.style.webkitTextFillColor = bg;
-          span.style.color = bg;
+          box.style.backgroundImage = 'linear-gradient(90deg, #ff4d4d, #ffb14d, #ffe14d, #4dff88, #4dc9ff, #a24dff, #ff4dd2)';
+          box.style.webkitBackgroundClip = 'text';
+          box.style.backgroundClip = 'text';
+          box.style.webkitTextFillColor = 'transparent';
         }else if(deco === 'pop'){
-          span.style.textShadow = '2px 2px 0 rgba(0,0,0,0.5), -1px -1px 0 rgba(255,255,255,0.4)';
-          span.style.fontWeight = '900';
+          box.style.webkitTextStroke = `1.3px ${isLightColor_(color) ? '#1a1420' : '#f5ece0'}`;
+          const d = Math.max(2, Math.round(size / 9));
+          box.style.textShadow = `${d}px ${d}px 0 rgba(0,0,0,0.5)`;
         }
       }
       el.querySelectorAll('.size-row .text-opt, .color-opt, .shape-row .text-opt, .deco-row .text-opt, .pos-row .text-opt, .font-row .text-opt').forEach(opt => {
