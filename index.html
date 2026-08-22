@@ -220,6 +220,8 @@
   const BG_OPTS = ['#1a1420','#ffffff','#e05a2d','#2a4d3a','#1a2a4d'];
   const SHAPE_OPTS = [{v:'box', t:'四角'}, {v:'glow', t:'ぼかし'}, {v:'bubble', t:'吹き出し'}];
   const FONT_OPTS = [{v:'gothic', t:'ゴシック体'}, {v:'yomogi', t:'手書き風'}, {v:'klee', t:'やわらかい手書き'}, {v:'textbook', t:'教科書体'}];
+  const SIZE_OPTS = [{v:14, t:'小'}, {v:22, t:'中'}, {v:32, t:'大'}, {v:44, t:'特大'}];
+  const DECO_OPTS = [{v:'normal', t:'通常'}, {v:'shadow', t:'ドロップシャドウ'}, {v:'gradient', t:'グラデーション'}, {v:'pop', t:'ポップ'}, {v:'rainbow', t:'虹色'}, {v:'outline', t:'袋文字'}];
   const POS_OPTS = [{v:'top', t:'上'}, {v:'center', t:'中央'}, {v:'bottom', t:'下'}];
   const FONT_CSS = {
     gothic: '"Zen Kaku Gothic New", sans-serif',
@@ -299,6 +301,12 @@
       // 簡易装飾選択(文字色・形・位置)。メッセージがある投稿の時だけ意味があるが、常に表示しておく
       html += `<div class="style-picker">
         <div class="style-picker-row">
+          <label>文字の大きさ</label>
+          <div class="style-opt-row size-row">
+            ${SIZE_OPTS.map((s,i) => `<div class="text-opt${i===1?' selected':''}" data-size="${s.v}">${s.t}</div>`).join('')}
+          </div>
+        </div>
+        <div class="style-picker-row">
           <label>文字色</label>
           <div class="style-opt-row color-row">
             ${COLOR_OPTS.map((c,i) => `<div class="color-opt${i===0?' selected':''}" data-color="${c}" style="background:${c};"></div>`).join('')}
@@ -314,6 +322,12 @@
           <label>形</label>
           <div class="style-opt-row shape-row">
             ${SHAPE_OPTS.map((s,i) => `<div class="text-opt${i===0?' selected':''}" data-shape="${s.v}">${s.t}</div>`).join('')}
+          </div>
+        </div>
+        <div class="style-picker-row">
+          <label>装飾効果</label>
+          <div class="style-opt-row deco-row">
+            ${DECO_OPTS.map((d,i) => `<div class="text-opt${i===0?' selected':''}" data-deco="${d.v}">${d.t}</div>`).join('')}
           </div>
         </div>
         <div class="style-picker-row">
@@ -336,36 +350,72 @@
       function updatePreview(){
         const previewCap = el.querySelector('.preview-caption');
         if(!previewCap || !item.message) return;
+        const size = el.querySelector('.size-row .text-opt.selected').dataset.size;
         const color = el.querySelector('.color-row .color-opt.selected').dataset.color;
         const bg = el.querySelector('.bg-row .color-opt.selected').dataset.bg;
         const shape = el.querySelector('.shape-row .text-opt.selected').dataset.shape;
+        const deco = el.querySelector('.deco-row .text-opt.selected').dataset.deco;
         const font = el.querySelector('.font-row .text-opt.selected').dataset.font;
         const pos = el.querySelector('.pos-row .text-opt.selected').dataset.pos;
         previewCap.style.display = 'flex';
         previewCap.style.alignItems = pos === 'top' ? 'flex-start' : (pos === 'bottom' ? 'flex-end' : 'center');
         const span = previewCap.querySelector('.preview-caption-text');
         span.textContent = item.message;
-        span.style.color = color;
         span.style.fontFamily = FONT_CSS[font] || FONT_CSS.gothic;
+        // プレビュー欄の表示上、実物の文字サイズをそのまま使うと大きすぎるため、見た目のバランスを取って縮小して表示する
+        span.style.fontSize = (parseInt(size, 10) * 0.55) + 'px';
+
+        // 形(背景の見せ方)
         if(shape === 'bubble'){
           span.style.background = bg;
           span.style.borderRadius = '16px';
-          span.style.textShadow = 'none';
         }else if(shape === 'glow'){
           span.style.background = 'transparent';
-          span.style.textShadow = `0 0 10px ${bg}, 0 0 18px ${bg}`;
         }else{
           span.style.background = bg;
           span.style.borderRadius = '6px';
-          span.style.textShadow = 'none';
+        }
+
+        // 装飾効果(簡易的な再現)
+        span.style.color = color;
+        span.style.backgroundClip = 'border-box';
+        span.style.webkitBackgroundClip = 'border-box';
+        span.style.webkitTextFillColor = '';
+        span.style.webkitTextStroke = '';
+        span.style.textShadow = shape === 'glow' ? `0 0 10px ${bg}, 0 0 18px ${bg}` : 'none';
+        if(deco === 'shadow'){
+          span.style.textShadow = (span.style.textShadow === 'none' ? '' : span.style.textShadow + ', ') + '3px 3px 0 rgba(0,0,0,0.6)';
+        }else if(deco === 'gradient'){
+          span.style.backgroundImage = `linear-gradient(135deg, ${color}, #ffd75e)`;
+          span.style.webkitBackgroundClip = 'text';
+          span.style.backgroundClip = 'text';
+          span.style.webkitTextFillColor = 'transparent';
+        }else if(deco === 'rainbow'){
+          span.style.backgroundImage = 'linear-gradient(90deg, #ff5a5a, #ffb347, #ffe066, #6ee7a0, #5ac8ff, #b06eff)';
+          span.style.webkitBackgroundClip = 'text';
+          span.style.backgroundClip = 'text';
+          span.style.webkitTextFillColor = 'transparent';
+        }else if(deco === 'outline'){
+          span.style.webkitTextStroke = `1.5px ${color}`;
+          span.style.webkitTextFillColor = bg;
+          span.style.color = bg;
+        }else if(deco === 'pop'){
+          span.style.textShadow = '2px 2px 0 rgba(0,0,0,0.5), -1px -1px 0 rgba(255,255,255,0.4)';
+          span.style.fontWeight = '900';
         }
       }
-      el.querySelectorAll('.color-opt, .shape-row .text-opt, .pos-row .text-opt, .font-row .text-opt').forEach(opt => {
+      el.querySelectorAll('.size-row .text-opt, .color-opt, .shape-row .text-opt, .deco-row .text-opt, .pos-row .text-opt, .font-row .text-opt').forEach(opt => {
         opt.addEventListener('click', () => setTimeout(updatePreview, 0)); // 選択反映(selected付与)の直後に更新する
       });
       updatePreview();
 
-      // 文字色・背景色・形・フォント・位置、それぞれタップで選択できるようにする(同じ行の中は1つだけ選ばれる)
+      // 文字の大きさ・色・背景色・形・装飾効果・フォント・位置、それぞれタップで選択できるようにする(同じ行の中は1つだけ選ばれる)
+      el.querySelectorAll('.size-row .text-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+          el.querySelectorAll('.size-row .text-opt').forEach(o => o.classList.remove('selected'));
+          opt.classList.add('selected');
+        });
+      });
       el.querySelectorAll('.color-row .color-opt').forEach(opt => {
         opt.addEventListener('click', () => {
           el.querySelectorAll('.color-row .color-opt').forEach(o => o.classList.remove('selected'));
@@ -381,6 +431,12 @@
       el.querySelectorAll('.shape-row .text-opt').forEach(opt => {
         opt.addEventListener('click', () => {
           el.querySelectorAll('.shape-row .text-opt').forEach(o => o.classList.remove('selected'));
+          opt.classList.add('selected');
+        });
+      });
+      el.querySelectorAll('.deco-row .text-opt').forEach(opt => {
+        opt.addEventListener('click', () => {
+          el.querySelectorAll('.deco-row .text-opt').forEach(o => o.classList.remove('selected'));
           opt.classList.add('selected');
         });
       });
@@ -402,18 +458,20 @@
         btn.disabled = true;
         btn.textContent = '送信中…';
 
+        const selectedSize = el.querySelector('.size-row .text-opt.selected').dataset.size;
         const selectedColor = el.querySelector('.color-row .color-opt.selected').dataset.color;
         const selectedBg = el.querySelector('.bg-row .color-opt.selected').dataset.bg;
         const selectedShape = el.querySelector('.shape-row .text-opt.selected').dataset.shape;
+        const selectedDeco = el.querySelector('.deco-row .text-opt.selected').dataset.deco;
         const selectedFont = el.querySelector('.font-row .text-opt.selected').dataset.font;
         const selectedPos = el.querySelector('.pos-row .text-opt.selected').dataset.pos;
         const style = {
-          size: 22,
+          size: parseInt(selectedSize, 10),
           color: 'custom',
           colorCustom: selectedColor,
           shape: selectedShape,
           pos: selectedPos,
-          deco: 'normal',
+          deco: selectedDeco,
           font: selectedFont,
           bg: 'custom',
           bgCustom: selectedBg
